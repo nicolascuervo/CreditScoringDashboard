@@ -1,3 +1,5 @@
+from errno import EMSGSIZE
+from typing import Callable
 import pandas as pd
 import streamlit as st
 import requests
@@ -14,7 +16,8 @@ import matplotlib.pyplot as plt
 FAST_API = 'http://127.0.0.1:8000'
 MIN_SK_ID_CURR = 100001
 MAX_SK_ID_CURR = 456255
-st.set_page_config(page_title='Credit approval', page_icon='🤞', layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title='Credit approval', page_icon='🤞', layout="wide", initial_sidebar_state="collapsed")
+
 
 
 @st.cache_data
@@ -27,6 +30,10 @@ field_types = input_information['Dtype'].apply(lambda x : eval(f'({x}, ...)')).t
 ModelEntries = create_model('ModelEntries', **field_types)
 
 def main():
+    
+    # check available models
+    available_models = get_model_names(FAST_API)
+    model_name_v = st.sidebar.selectbox('model', available_models)
     
     # Streamlit tabs
     tab_names = ['Credit Approval', ' Particular decision factors', 'General decision factors']
@@ -69,8 +76,9 @@ def main():
         
     # evaluate credit
     if submit_credit:
-        response = request_model(FAST_API, 'validate_client/deployment_v1', loan_submission)
-        display_credit_request_response([row_0[1], row_1[0]], response)
+        response = request_model(FAST_API, f'{model_name_v}/validate_client', loan_submission)
+        if response is not None:
+            display_credit_request_response([row_0[1], row_1[0]], response)
 
 
 @st.cache_data
@@ -81,19 +89,45 @@ def load_full_application_data():
     X_full = pd.concat([X_train, X_test], axis=0).sort_index()    
     return X_full
 
-def display_credit_request_response(container: st.container, response):
-    if response.status_code==200:
-        prediction = json.loads(response.text)    
-        predict_proba = prediction["default_probability"]
-        validation_threshold = prediction['validation_threshold']
-        show_scoring_gauge(container, predict_proba, validation_threshold)
-    else:
-        container.error(response.text)
 
-def request_model(model_uri, request, data):
-    response = requests.post( f"{model_uri}/{request}/", json=data,)
+def process_server_response_decorator(func:Callable):
+    def modified_function(*args, **kwargs):
+        response = func(*args, **kwargs)
+        if response.status_code==200:
+            content = json.loads(response.text)    
+            return content           
+        else:
+            show_server_error(response)
+    return modified_function
+        
+
+@st.dialog("Server Error")
+def show_server_error(response):
+    error_codes={422: 'Input Validation Error',
+                 404: 'Requested url unavailable'}
+
+    status_code = response.status_code 
+    if status_code in error_codes.keys():
+        st.write(f'ERROR: {status_code} : {error_codes[status_code]}')
+    else:
+        st.write(f'ERROR: {status_code} : detail unknown')
+    if st.button('OK'):
+        st.rerun()
+
+    
+
+
+@process_server_response_decorator
+def request_model(api_uri, request, data):
+    headers = {"Content-Type": "application/json"}
+    response = requests.post( f"{api_uri}/{request}/", json=data, headers=headers)
     return response
 
+@process_server_response_decorator
+def get_model_names(api_uri):
+    headers = {"Content-Type": "application/json"}
+    response = requests.get( f"{api_uri}/available_model_name_v/", headers=headers)
+    return response
 
 def get_credit_application(sk_id_curr: int)-> ModelEntries:
     X_full = load_full_application_data()
@@ -149,8 +183,9 @@ def load_credit_request_form(form: st.container, inputs: pd.DataFrame, credit_ap
             form_output[feature] = None
     return form_output  
 
-def  show_scoring_gauge(container:list[st.container], predict_proba:float, validation_threshold) :
-   
+def  display_credit_request_response(container: st.container, prediction:dict[str, bool|list[bool]]):
+    predict_proba = prediction["default_probability"]
+    validation_threshold = prediction['validation_threshold']   
 
     if predict_proba <= validation_threshold:
         container[0].title('Credit approved:')
