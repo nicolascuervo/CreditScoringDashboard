@@ -7,9 +7,12 @@ import numpy as np
 import json
 from pydantic import create_model
 import matplotlib.pyplot as plt
+import seaborn as sns
 from shap.plots import waterfall, beeswarm
 from shap import Explanation
 from streamlit_shap import st_shap
+from projet07.model_evaluation import plot_feature_importances
+
 
 
 
@@ -18,7 +21,7 @@ MIN_SK_ID_CURR = 100001
 MAX_SK_ID_CURR = 456255
 st.set_page_config(page_title='Credit approval', page_icon='🤞', layout="wide", initial_sidebar_state="collapsed")
 
-
+sns.set_theme()
 
 @st.cache_data
 def load_input_information():
@@ -82,28 +85,76 @@ def main():
     get_local_explanation, n_features_to_show = load_feature_form(local_feature_importance_tab,'local')
 
     # # Local feature importance form
-    get_global_explanation, n_global_features_to_show = load_feature_form(global_feature_importance_tab, 'global')
+    get_global_explanation, n_global_features_to_show, cum_imp_cut = load_feature_form(global_feature_importance_tab, 'global')
 
 
     # evaluate credit
     if submit_credit or st.session_state['credit_analized']:
-        response = request_model(FAST_API, f'{model_name_v}/validate_client', loan_submission)
+        response = post_request_model(FAST_API, f'{model_name_v}/validate_client', loan_submission)
         if response is not None:
             display_credit_request_response([row_0[1], row_1[0]], response)
             st.session_state['credit_analized'] = True
             
     # get_local_explanation
     if get_local_explanation:
-        local_feat_importance_row_1 = local_feature_importance_tab.columns([1,1])
-        shap_plots(local_feat_importance_row_1[0],loan_submission, model_name_v, n_features_to_show)
+        local_shap_plots(local_feature_importance_tab, loan_submission, model_name_v, n_features_to_show)
+
+    # get_local_explanation
+    if get_global_explanation:
+        global_features_plots(global_feature_importance_tab, model_name_v, n_global_features_to_show, cum_imp_cut)
 
 
+def global_features_plots(container: st.container, model_name_v:str, n_features_to_show:int, cum_imp_cut:float): # type: ignore
+    
+    global_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', None)
+    global_importance_dict = post_query_model(FAST_API, f'{model_name_v}/get_global_feature_importance', {"cum_importance_cut": cum_imp_cut})
+    feature_importances_domain=pd.DataFrame(global_importance_dict['feature_importances_domain']).reset_index().drop(columns=['index'], inplace=False)
+    most_important_features = global_importance_dict['most_important_features']
+    
+    if global_shaps is not None:
+        
+        global_shap_values = get_shap_values(global_shaps)
+
+        #Inversion if values sign to signify approval score instead of default prediction
+        global_shap_values.values = -global_shap_values.values
+        global_shap_values.base_values = -global_shap_values.base_values
+
+        n_features = len(most_important_features)
+        st.session_state['n_features'] = n_features
+        with container:            
+            fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
+            ax = plt.subplot(1, 2, 1)      
+            plot_feature_importances(feature_importances_domain, most_important_features, n_features_to_show, ax)
+      
+            ax = plt.subplot(1, 2, 2)    
+            shap_order = global_shap_values.abs.mean(0)
+            feat_order = feature_importances_domain.sort_index(ascending=False).reset_index()[['feature']].reset_index().set_index('feature')
+            feat_order = feat_order
+            shap_order.values = feat_order.loc[global_shap_values.feature_names,'index'].values            
+            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_order, s=2)
+            ax.set_yticklabels(['']*n_features_to_show)
+            ax.set_ylim([-1, n_features_to_show])
+            ax.set_xticklabels([])            
+            ax.set_xlabel('Feature effect', fontsize=8)
+            plt.tight_layout()            
+            container.pyplot(fig, use_container_width=True)
 
 def load_feature_form(container, feature_type:str):
     feat_importance_row_0 = container.columns([1,1,1])
     n_features_to_show_form = feat_importance_row_0[1].form(f'Number of {feature_type} features to show features to show')
+    cum_imp_cut = None
     with n_features_to_show_form:
-        columns = st.columns([3,1])
+        if feature_type=='local':
+            columns = st.columns([3,1], vertical_alignment='bottom')
+        elif feature_type=='global':
+            columns = st.columns([3,3,2], vertical_alignment='bottom')   
+            cum_imp_cut = columns[1].number_input("Cumulative importance cut:",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.95)     
+        else:
+            raise('feature_type not handled')
+
         if f'n_{feature_type}_features' in st.session_state:
             n_features = st.session_state[f'n_{feature_type}_features']
         else:
@@ -112,12 +163,11 @@ def load_feature_form(container, feature_type:str):
                         min_value=2,
                         max_value=n_features,
                         value= 10)
-        get_explanation = columns[1].form_submit_button(f'Show {feature_type} feature explanation')
-    return get_explanation, n_features_to_show
-    
-
-
-    
+        get_explanation = columns[-1].form_submit_button(f'Show {feature_type} feature explanation')
+        if cum_imp_cut is None:
+            return get_explanation, n_features_to_show
+        else:
+            return get_explanation, n_features_to_show, cum_imp_cut
     
 
 
@@ -136,10 +186,10 @@ def get_shap_values(explanation_attrs: dict[str, Any])->Explanation:
   
     return Explanation(**recons_attrs)
 
-def shap_plots(container: st.container, loan_submission, model_name_v, n_features_to_show): # type: ignore
+def local_shap_plots(container: st.container, loan_submission, model_name_v, n_features_to_show): # type: ignore
     
-    local_shaps = request_model(FAST_API, f'{model_name_v}/shap_value_attributes', loan_submission)
-    global_shaps = request_model(FAST_API, f'{model_name_v}/shap_value_attributes', None)
+    local_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', loan_submission)
+    global_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', None)
 
     if local_shaps is not None:
         shap_values = get_shap_values(local_shaps)
@@ -161,9 +211,10 @@ def shap_plots(container: st.container, loan_submission, model_name_v, n_feature
             ax.set_ylim([-1, n_features_to_show])
 
             ax = plt.subplot(1, 2, 2)    
-            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0))
+            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0), s=2)
             ax.set_yticklabels([])
             ax.set_ylim([-1, n_features_to_show])
+            
             st_shap( fig, height=n_features_to_show*50 , width=1500)
             
             
@@ -211,14 +262,19 @@ def show_exception_error(e:Exception):
     st.write(f'ERROR: {e.__dict__} : detail unknown')
     if st.button('OK'):
         st.rerun()
-    
-
 
 @process_server_response_decorator
-def request_model(api_uri, request, data):
-    headers = {"Content-Type": "application/json"}
+def post_request_model(api_uri, request, data):
+    headers = {"Content-Type": "application/json"}    
     response = requests.post( f"{api_uri}/{request}/", json=data, headers=headers)
     return response
+
+@process_server_response_decorator
+def post_query_model(api_uri, request, param):
+    headers = {"Content-Type": "application/json"}    
+    response = requests.post( f"{api_uri}/{request}/", params=param, headers=headers)
+    return response
+
 
 @process_server_response_decorator
 def get_model_names(api_uri):
