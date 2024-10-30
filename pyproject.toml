@@ -9,9 +9,12 @@ readme = "README.md"
 python = "^3.10"
 pandas = "^2.2.3"
 streamlit = "^1.39.0"
-numpy = "^2.1.2"
+numpy = "2.0.0"
 pydantic = "^2.9.2"
 matplotlib = "^3.9.2"
+shap = "^0.46.0"
+streamlit-shap = "^1.0.2"
+projet07 = {git = "https://github.com/nicolascuervo/CreditScoring.git"}
 
 
 [build-system]
