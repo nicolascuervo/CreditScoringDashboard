@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Any
 import pandas as pd
 import streamlit as st
@@ -12,13 +13,20 @@ from shap.plots import waterfall, beeswarm
 from shap import Explanation
 from streamlit_shap import st_shap
 from projet07.model_evaluation import plot_feature_importances
+from creditscoringdashboard.aux_func import get_file_from
+from dotenv import load_dotenv
 
-
-
-
+load_dotenv()
 FAST_API = 'http://127.0.0.1:8000'
-MIN_SK_ID_CURR = 100001
-MAX_SK_ID_CURR = 456255
+FAST_API = os.getenv('FAST_API')
+
+
+MIN_SK_ID_CURR = int(os.getenv('MIN_SK_ID_CURR')) 
+MAX_SK_ID_CURR = int(os.getenv('MAX_SK_ID_CURR')) 
+
+
+input_information = "data/input_information.csv"
+
 st.set_page_config(page_title='Credit approval', page_icon='🤞', layout="wide", initial_sidebar_state="collapsed")
 
 sns.set_theme()
@@ -26,7 +34,7 @@ sns.set_theme()
 @st.cache_data
 def load_input_information():
     """Load the input information CSV and cache it."""
-    return pd.read_csv("data/input_information.csv", index_col=0)
+    return pd.read_csv(input_information, index_col=0)
 
 input_information = load_input_information()
 field_types = input_information['Dtype'].apply(lambda x : eval(f'({x}, ...)')).to_dict()
@@ -222,8 +230,16 @@ def local_shap_plots(container: st.container, loan_submission, model_name_v, n_f
 @st.cache_data
 def load_full_application_data():
     """Load and cache the full application dataset."""
-    X_train = pd.read_csv('data/application_train.csv', index_col='SK_ID_CURR').drop(columns=['TARGET'])
-    X_test = pd.read_csv('data/application_test.csv', index_col='SK_ID_CURR')
+
+    application_train_path = os.getenv('APPLICATION_TRAIN_CSV')
+    application_test_path = os.getenv('APPLICATION_TEST_CSV')
+
+    application_train_csv = get_file_from(application_train_path,'application_train.csv')
+    application_test_csv = get_file_from(application_test_path,'application_test.csv')
+
+
+    X_train = pd.read_csv(application_train_csv, index_col='SK_ID_CURR').drop(columns=['TARGET'])
+    X_test = pd.read_csv(application_test_csv, index_col='SK_ID_CURR')
     X_full = pd.concat([X_train, X_test], axis=0).sort_index()    
     return X_full
 
