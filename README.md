@@ -4,26 +4,46 @@ This project was developepd in an academic context based on the scenario present
 
 hereby is presented the dashboard for interacting with the [API](https://github.com/nicolascuervo/CreditScoringAPI) that serves ONE model for ONE client loan request
 
-> It is running localy at this stage
-
 # How to use
+## Locally
+the following environment variables are to be defined in a file '.env' at root:
 
-Include the following files  folder project-root/data
 ```
-project-root/
-│
-└── data/
-    ├── application_test.csv
-    ├── application_train.csv
-    └── input_information.csv
+MIN_SK_ID_CURR=100001
+MAX_SK_ID_CURR=456255
+FAST_API=http://127.0.0.1:8000
 ```
-application_test/train.csv are available at https://www.kaggle.com/c/home-credit-default-risk/data.
-input_information.csv is generated in parallel [CreditScoring project](https://github.com/nicolascuervo/CreditScoring)
-  
-# run
+On terminal go to root directory and input:
 
-On terminal input:
 ```
-streamlit run path/to/dashboard.py
+streamlit run streamlit/dashboard.py
 ```
-> the dashboard is ment to work with a limited MIN_SK_ID_CURR = 100001 and MAX_SK_ID_CURR = 456255. If the data ever expands this values shoul be changed
+## Cloud
+
+
+### Heroku Deployment
+
+Update requirements.txt with
+ ```
+poetry export -f requirements.txt --output requirements.txt --without-hashes
+```
+and push the requirements.txt file
+
+Also push with file `Procfile` contaning this line for the API to deploy
+
+```
+web: streamlit run streamlit/dashboard.py --server.port $PORT --server.address 0.0.0.0
+```
+
+the following environment variables are to be defined:
+
+```
+MIN_SK_ID_CURR=100001
+MAX_SK_ID_CURR=456255
+FAST_API=https://api-app_name-00000.herokuapp.com
+```
+
+When the API is running swagger for the API can be consulted on
+```url
+url_api/docs
+```

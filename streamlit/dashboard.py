@@ -13,17 +13,14 @@ from shap.plots import waterfall, beeswarm
 from shap import Explanation
 from streamlit_shap import st_shap
 from projet07.model_evaluation import plot_feature_importances
-from creditscoringdashboard.aux_func import get_file_from
 from dotenv import load_dotenv
 
 load_dotenv()
 FAST_API = 'http://127.0.0.1:8000'
 FAST_API = os.getenv('FAST_API')
 
-
 MIN_SK_ID_CURR = int(os.getenv('MIN_SK_ID_CURR')) 
 MAX_SK_ID_CURR = int(os.getenv('MAX_SK_ID_CURR')) 
-
 
 input_information = "data/input_information.csv"
 
@@ -127,8 +124,10 @@ def global_features_plots(container: st.container, model_name_v:str, n_features_
         global_shap_values.values = -global_shap_values.values
         global_shap_values.base_values = -global_shap_values.base_values
 
-        n_features = len(most_important_features)
+        n_features = global_shap_values.shape[1]
         st.session_state['n_features'] = n_features
+        n_features_to_show = min(n_features, n_features_to_show )
+
         with container:            
             fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
             ax = plt.subplot(1, 2, 1)      
@@ -163,15 +162,18 @@ def load_feature_form(container, feature_type:str):
         else:
             raise('feature_type not handled')
 
-        if f'n_{feature_type}_features' in st.session_state:
-            n_features = st.session_state[f'n_{feature_type}_features']
+        if 'n_features' in st.session_state:
+            n_features = st.session_state['n_features']
         else:
             n_features = None
+
         n_features_to_show = columns[0].number_input("Number of explaining factors to display:",
                         min_value=2,
                         max_value=n_features,
                         value= 10)
         get_explanation = columns[-1].form_submit_button(f'Show {feature_type} feature explanation')
+
+
         if cum_imp_cut is None:
             return get_explanation, n_features_to_show
         else:
@@ -210,8 +212,9 @@ def local_shap_plots(container: st.container, loan_submission, model_name_v, n_f
         global_shap_values.values = -global_shap_values.values
         global_shap_values.base_values = -global_shap_values.base_values
 
-        n_features = len(shap_values.feature_names)
+        n_features = global_shap_values.shape[1]
         st.session_state['n_features'] = n_features
+        n_features_to_show = min(n_features, n_features_to_show )
         with container:            
             fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show, 8))
             ax = plt.subplot(1, 2, 1)                
@@ -227,23 +230,6 @@ def local_shap_plots(container: st.container, loan_submission, model_name_v, n_f
             
             
     
-@st.cache_data
-def load_full_application_data():
-    """Load and cache the full application dataset."""
-
-    application_train_path = os.getenv('APPLICATION_TRAIN_CSV')
-    application_test_path = os.getenv('APPLICATION_TEST_CSV')
-
-    application_train_csv = get_file_from(application_train_path,'application_train.csv')
-    application_test_csv = get_file_from(application_test_path,'application_test.csv')
-
-
-    X_train = pd.read_csv(application_train_csv, index_col='SK_ID_CURR').drop(columns=['TARGET'])
-    X_test = pd.read_csv(application_test_csv, index_col='SK_ID_CURR')
-    X_full = pd.concat([X_train, X_test], axis=0).sort_index()    
-    return X_full
-
-
 def process_server_response_decorator(func:Callable):
     def modified_function(*args, **kwargs):
         try:
@@ -299,8 +285,10 @@ def get_model_names(api_uri):
     return response
 
 def get_credit_application(sk_id_curr: int)-> ModelEntries: # type: ignore
-    X_full = load_full_application_data()
-    return X_full.loc[sk_id_curr,:].replace({np.nan:None}).to_dict()
+    input_data = post_query_model(FAST_API,'/get_credit_application', {'SK_ID_CURR': sk_id_curr})    
+    print(input_data)
+    return input_data
+    # return X_full.loc[sk_id_curr,:].replace({np.nan:None}).to_dict()
     
 def load_credit_request_form(form: st.container, inputs: pd.DataFrame, credit_application_0: ModelEntries): # type: ignore
     form_output: dict[str: str|float|int|None] = {}
