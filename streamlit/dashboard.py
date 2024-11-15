@@ -341,7 +341,7 @@ def load_credit_request_form(form: st.container, inputs: pd.DataFrame, credit_ap
     return form_output  
 
 def  display_credit_request_response(container: st.container, prediction:dict[str, bool|list[bool]]): # type: ignore
-    predict_proba = prediction["default_probability"]
+    predict_proba = prediction["default_probability"][0]
     validation_threshold = prediction['validation_threshold']   
 
     if predict_proba <= validation_threshold:
