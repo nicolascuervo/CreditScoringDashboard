@@ -1,19 +1,21 @@
-import os
-from typing import Callable, Any
-import pandas as pd
-import streamlit as st
-import requests
 import ast
-import numpy as np
 import json
-from pydantic import create_model
+import os
+from typing import Any, Callable
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import requests
 import seaborn as sns
-from shap.plots import waterfall, beeswarm
-from shap import Explanation
-from streamlit_shap import st_shap
-from projet07.model_exploitation import plot_feature_importances
 from dotenv import load_dotenv
+from projet07.model_exploitation import plot_feature_importances
+from pydantic import create_model
+from shap import Explanation
+from shap.plots import beeswarm, waterfall
+from streamlit_shap import st_shap
+
+import streamlit as st
 
 load_dotenv()
 FAST_API = 'http://127.0.0.1:8000'
@@ -45,68 +47,76 @@ def main():
     
     # Streamlit tabs
     tab_names = ['Credit Approval', ' Particular decision factors', 'General decision factors']
-    credit_approval_tab, local_feature_importance_tab, global_feature_importance_tab = st.tabs(tab_names)    
+    selected_tab = st.radio(
+        "Navigate Tabs",
+        options=tab_names,
+        index=0,
+        horizontal=True,
+        key="tab_selector",
+        help="Use this to switch between different sections."
+    ) 
 
-    # credit ID form
-    row_0 = credit_approval_tab.columns([1, 2])
-    row_1 = credit_approval_tab.columns([1])  
-    
-    if 'sk_id_curr0' in st.session_state:
-        sk_id_curr0 = st.session_state['sk_id_curr0']        
-    else:
-        sk_id_curr0 = np.random.randint(MIN_SK_ID_CURR, MAX_SK_ID_CURR)
-        st.session_state['sk_id_curr0'] = sk_id_curr0
-    if 'credit_analized' not in st.session_state:
-        st.session_state['credit_analized'] = False
+    if selected_tab == tab_names[0]:
+        # credit ID form
+        row_0 = st.columns([1, 2])
+        row_1 = st.columns([1])  
         
-    credit_id_form = row_0[0].form("load_credit_form")
-    
-    sk_id_curr = credit_id_form.number_input(
-        label='SK_ID_CURR', 
-        min_value=MIN_SK_ID_CURR,                        
-        max_value=MAX_SK_ID_CURR,
-        value=sk_id_curr0,
-        step=1,
-        help='ID of loan',
-        )
-    load_application = credit_id_form.form_submit_button('Load Application')
-
-    # Loan application form
-    loan_request_detail_form = credit_approval_tab.form("Loan request Details")
-    row_2 = loan_request_detail_form.columns([1,1,1])  
-    submit_credit = row_2[1].form_submit_button('Submit Credit Request')
-    
-    if load_application:        
-        loan_request_data_0 = ModelEntries(**get_credit_application(sk_id_curr))
-        st.session_state['loan_request_data_0'] = loan_request_data_0    
-        st.session_state['credit_analized'] = False
-
-    if 'loan_request_data_0' in st.session_state:
-        loan_request_data_0 = st.session_state['loan_request_data_0']
-        loan_submission = load_credit_request_form(loan_request_detail_form, input_information, loan_request_data_0 )
-    
-
-    # Local feature importance form
-    get_local_explanation, n_features_to_show = load_feature_form(local_feature_importance_tab,'local')
-
-    # # Local feature importance form
-    get_global_explanation, n_global_features_to_show, cum_imp_cut = load_feature_form(global_feature_importance_tab, 'global')
-
-
-    # evaluate credit
-    if submit_credit or st.session_state['credit_analized']:
-        response = post_request_model(FAST_API, f'{model_name_v}/validate_client', loan_submission)
-        if response is not None:
-            display_credit_request_response([row_0[1], row_1[0]], response)
-            st.session_state['credit_analized'] = True
+        if 'sk_id_curr0' in st.session_state:
+            sk_id_curr0 = st.session_state['sk_id_curr0']        
+        else:
+            sk_id_curr0 = np.random.randint(MIN_SK_ID_CURR, MAX_SK_ID_CURR)
+            st.session_state['sk_id_curr0'] = sk_id_curr0
+        if 'credit_analized' not in st.session_state:
+            st.session_state['credit_analized'] = False
             
-    # get_local_explanation
-    if get_local_explanation:
-        local_shap_plots(local_feature_importance_tab, loan_submission, model_name_v, n_features_to_show)
+        credit_id_form = row_0[0].form("load_credit_form")
+        
+        sk_id_curr = credit_id_form.number_input(
+            label='SK_ID_CURR', 
+            min_value=MIN_SK_ID_CURR,                        
+            max_value=MAX_SK_ID_CURR,
+            value=sk_id_curr0,
+            step=1,
+            help='ID of loan',
+            )
+        load_application = credit_id_form.form_submit_button('Load Application')
 
-    # get_local_explanation
-    if get_global_explanation:
-        global_features_plots(global_feature_importance_tab, model_name_v, n_global_features_to_show, cum_imp_cut)
+        # Loan application form
+        loan_request_detail_form = st.form("Loan request Details")
+        row_2 = loan_request_detail_form.columns([1,1,1])  
+        submit_credit = row_2[1].form_submit_button('Submit Credit Request')
+    
+        if load_application:        
+            loan_request_data_0 = ModelEntries(**get_credit_application(sk_id_curr))
+            st.session_state['loan_request_data_0'] = loan_request_data_0    
+            st.session_state['credit_analized'] = False
+
+        if 'loan_request_data_0' in st.session_state:
+            loan_request_data_0 = st.session_state['loan_request_data_0']
+            loan_submission = load_credit_request_form(loan_request_detail_form, input_information, loan_request_data_0 )
+            st.session_state['loan_submission'] = loan_submission
+        # evaluate credit
+        if submit_credit or st.session_state['credit_analized']:
+            response = post_request_model(FAST_API, f'{model_name_v}/validate_client', loan_submission)
+            if response is not None:
+                display_credit_request_response([row_0[1], row_1[0]], response)
+                st.session_state['credit_analized'] = True
+    elif selected_tab == tab_names[1]:
+        # Local feature importance form
+        get_local_explanation, n_features_to_show = load_feature_form(st,'local')
+           # get_local_explanation
+        if get_local_explanation and 'loan_submission' in st.session_state:
+            loan_submission = st.session_state['loan_submission']
+            local_shap_plots(st, loan_submission, model_name_v, n_features_to_show)
+        else:   
+            st.write('Please load a credit request to get the local explanation')
+
+    elif selected_tab == tab_names[2]:
+    # global feature importance form
+        get_global_explanation, n_global_features_to_show, cum_imp_cut = load_feature_form(st, 'global')
+        # get_local_explanation
+        if get_global_explanation:
+            global_features_plots(st, model_name_v, n_global_features_to_show, cum_imp_cut)
 
 
 def global_features_plots(container: st.container, model_name_v:str, n_features_to_show:int, cum_imp_cut:float): # type: ignore
@@ -128,23 +138,23 @@ def global_features_plots(container: st.container, model_name_v:str, n_features_
         st.session_state['n_features'] = n_features
         n_features_to_show = min(n_features, n_features_to_show )
 
-        with container:            
-            fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
-            ax = plt.subplot(1, 2, 1)      
-            plot_feature_importances(feature_importances_domain, most_important_features, n_features_to_show, ax)
-      
-            ax = plt.subplot(1, 2, 2)    
-            shap_order = global_shap_values.abs.mean(0)
-            feat_order = feature_importances_domain.sort_index(ascending=False).reset_index()[['feature']].reset_index().set_index('feature')
-            feat_order = feat_order
-            shap_order.values = feat_order.loc[global_shap_values.feature_names,'index'].values            
-            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_order, s=2)
-            ax.set_yticklabels(['']*n_features_to_show)
-            ax.set_ylim([-1, n_features_to_show])
-            ax.set_xticklabels([])            
-            ax.set_xlabel('Feature effect', fontsize=8)
-            plt.tight_layout()            
-            container.pyplot(fig, use_container_width=True)
+        # with container:            
+        fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
+        ax = plt.subplot(1, 2, 1)      
+        plot_feature_importances(feature_importances_domain, most_important_features, n_features_to_show, ax)
+    
+        ax = plt.subplot(1, 2, 2)    
+        shap_order = global_shap_values.abs.mean(0)
+        feat_order = feature_importances_domain.sort_index(ascending=False).reset_index()[['feature']].reset_index().set_index('feature')
+        feat_order = feat_order
+        shap_order.values = feat_order.loc[global_shap_values.feature_names,'index'].values            
+        beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_order, s=2)
+        ax.set_yticklabels(['']*n_features_to_show)
+        ax.set_ylim([-1, n_features_to_show])
+        ax.set_xticklabels([])            
+        ax.set_xlabel('Feature effect', fontsize=8)
+        plt.tight_layout()            
+        container.pyplot(fig, use_container_width=True)
 
 def load_feature_form(container, feature_type:str):
     feat_importance_row_0 = container.columns([1,1,1])
@@ -215,18 +225,18 @@ def local_shap_plots(container: st.container, loan_submission, model_name_v, n_f
         n_features = global_shap_values.shape[1]
         st.session_state['n_features'] = n_features
         n_features_to_show = min(n_features, n_features_to_show )
-        with container:            
-            fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show, 8))
-            ax = plt.subplot(1, 2, 1)                
-            waterfall(shap_values[0], max_display=n_features_to_show, show=False)
-            ax.set_ylim([-1, n_features_to_show])
+        # with container:            
+        fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show, 8))
+        ax = plt.subplot(1, 2, 1)                
+        waterfall(shap_values[0], max_display=n_features_to_show, show=False)
+        ax.set_ylim([-1, n_features_to_show])
 
-            ax = plt.subplot(1, 2, 2)    
-            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0), s=2)
-            ax.set_yticklabels([])
-            ax.set_ylim([-1, n_features_to_show])
-            
-            st_shap( fig, height=n_features_to_show*50 , width=1500)
+        ax = plt.subplot(1, 2, 2)    
+        beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0), s=2)
+        ax.set_yticklabels([])
+        ax.set_ylim([-1, n_features_to_show])
+        
+        st_shap( fig, height=n_features_to_show*50 , width=1500)
             
             
     
