@@ -12,7 +12,7 @@ import seaborn as sns
 from shap.plots import waterfall, beeswarm
 from shap import Explanation
 from streamlit_shap import st_shap
-from projet07.model_evaluation import plot_feature_importances
+from projet07.model_exploitation import plot_feature_importances
 from dotenv import load_dotenv
 
 load_dotenv()
