@@ -1,0 +1,14 @@
+{
+    "folders": [
+        {
+            "path": "crediscoringdashboard"
+        },
+    ],
+    "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#006125",
+        "titleBar.inactiveBackground": "#006125",
+    },
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/crediscoringdashboard",
+    ]
+}

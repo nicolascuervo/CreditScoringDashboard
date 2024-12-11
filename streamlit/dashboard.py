@@ -40,7 +40,7 @@ field_types = input_information['Dtype'].apply(lambda x : eval(f'({x}, ...)')).t
 ModelEntries = create_model('ModelEntries', **field_types)
 
 def main():
-    
+
     # check available models
     available_models = get_model_names(FAST_API)
     model_name_v = st.sidebar.selectbox('model', available_models)
@@ -103,23 +103,23 @@ def main():
                 st.session_state['credit_analized'] = True
     elif selected_tab == tab_names[1]:
         # Local feature importance form
-        get_local_explanation, n_features_to_show = load_feature_form(st,'local')
+        get_local_explanation, n_features_to_show, display_as_text = load_feature_form(st,'local')
            # get_local_explanation
         if get_local_explanation and 'loan_submission' in st.session_state:
             loan_submission = st.session_state['loan_submission']
-            local_shap_plots(st, loan_submission, model_name_v, n_features_to_show)
+            local_shap_plots(st, loan_submission, model_name_v, n_features_to_show, display_as_text)
         else:   
             st.write('Please load a credit request to get the local explanation')
 
     elif selected_tab == tab_names[2]:
     # global feature importance form
-        get_global_explanation, n_global_features_to_show, cum_imp_cut = load_feature_form(st, 'global')
+        get_global_explanation, n_global_features_to_show, display_as_text, cum_imp_cut = load_feature_form(st, 'global')
         # get_local_explanation
         if get_global_explanation:
-            global_features_plots(st, model_name_v, n_global_features_to_show, cum_imp_cut)
+            global_features_plots(st, model_name_v, n_global_features_to_show, display_as_text, cum_imp_cut)
 
 
-def global_features_plots(container: st.container, model_name_v:str, n_features_to_show:int, cum_imp_cut:float): # type: ignore
+def global_features_plots(container: st.container, model_name_v:str, n_features_to_show:int, display_as_text:bool, cum_imp_cut:float): # type: ignore
     
     global_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', None)
     global_importance_dict = post_query_model(FAST_API, f'{model_name_v}/get_global_feature_importance', {"cum_importance_cut": cum_imp_cut})
@@ -137,24 +137,27 @@ def global_features_plots(container: st.container, model_name_v:str, n_features_
         n_features = global_shap_values.shape[1]
         st.session_state['n_features'] = n_features
         n_features_to_show = min(n_features, n_features_to_show )
+        if display_as_text:
 
-        # with container:            
-        fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
-        ax = plt.subplot(1, 2, 1)      
-        plot_feature_importances(feature_importances_domain, most_important_features, n_features_to_show, ax)
-    
-        ax = plt.subplot(1, 2, 2)    
-        shap_order = global_shap_values.abs.mean(0)
-        feat_order = feature_importances_domain.sort_index(ascending=False).reset_index()[['feature']].reset_index().set_index('feature')
-        feat_order = feat_order
-        shap_order.values = feat_order.loc[global_shap_values.feature_names,'index'].values            
-        beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_order, s=2)
-        ax.set_yticklabels(['']*n_features_to_show)
-        ax.set_ylim([-1, n_features_to_show])
-        ax.set_xticklabels([])            
-        ax.set_xlabel('Feature effect', fontsize=8)
-        plt.tight_layout()            
-        container.pyplot(fig, use_container_width=True)
+            st.table(feature_importances_domain.iloc[:n_features_to_show])
+        else:
+            # with container:            
+            fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show*0.5, 30))
+            ax = plt.subplot(1, 2, 1)      
+            plot_feature_importances(feature_importances_domain, most_important_features, n_features_to_show, ax)
+        
+            ax = plt.subplot(1, 2, 2)    
+            shap_order = global_shap_values.abs.mean(0)
+            feat_order = feature_importances_domain.sort_index(ascending=False).reset_index()[['feature']].reset_index().set_index('feature')
+            feat_order = feat_order
+            shap_order.values = feat_order.loc[global_shap_values.feature_names,'index'].values            
+            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_order, s=2)
+            ax.set_yticklabels(['']*n_features_to_show)
+            ax.set_ylim([-1, n_features_to_show])
+            ax.set_xticklabels([])            
+            ax.set_xlabel('Feature effect', fontsize=8)
+            plt.tight_layout()            
+            container.pyplot(fig, use_container_width=True)
 
 def load_feature_form(container, feature_type:str):
     feat_importance_row_0 = container.columns([1,1,1])
@@ -182,12 +185,14 @@ def load_feature_form(container, feature_type:str):
                         max_value=n_features,
                         value= 10)
         get_explanation = columns[-1].form_submit_button(f'Show {feature_type} feature explanation')
-
+        
+        display_as_text = st.checkbox("Display as text",  key="local_text_view")
+        
 
         if cum_imp_cut is None:
-            return get_explanation, n_features_to_show
+            return get_explanation, n_features_to_show, display_as_text
         else:
-            return get_explanation, n_features_to_show, cum_imp_cut
+            return get_explanation, n_features_to_show, display_as_text, cum_imp_cut
     
 
 
@@ -206,7 +211,7 @@ def get_shap_values(explanation_attrs: dict[str, Any])->Explanation:
   
     return Explanation(**recons_attrs)
 
-def local_shap_plots(container: st.container, loan_submission, model_name_v, n_features_to_show): # type: ignore
+def local_shap_plots(container: st.container, loan_submission, model_name_v, n_features_to_show, display_as_text): # type: ignore
     
     local_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', loan_submission)
     global_shaps = post_request_model(FAST_API, f'{model_name_v}/shap_value_attributes', None)
@@ -225,19 +230,30 @@ def local_shap_plots(container: st.container, loan_submission, model_name_v, n_f
         n_features = global_shap_values.shape[1]
         st.session_state['n_features'] = n_features
         n_features_to_show = min(n_features, n_features_to_show )
-        # with container:            
-        fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show, 8))
-        ax = plt.subplot(1, 2, 1)                
-        waterfall(shap_values[0], max_display=n_features_to_show, show=False)
-        ax.set_ylim([-1, n_features_to_show])
 
-        ax = plt.subplot(1, 2, 2)    
-        beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0), s=2)
-        ax.set_yticklabels([])
-        ax.set_ylim([-1, n_features_to_show])
-        
-        st_shap( fig, height=n_features_to_show*50 , width=1500)
+        if display_as_text:
+            # Display as table
+            text_data = pd.DataFrame({
+                "Feature": shap_values.feature_names,
+                "Feature value effect": shap_values.values[0],
+                "Feature value effect abs": np.abs(shap_values.values[0]),                
+            }).sort_values("Feature value effect abs", ascending=False)
+            st.table(text_data.iloc[:n_features_to_show][["Feature", "Feature value effect"]])
+        else:
+            # Display plots
+                    
+            fig, axes = plt.subplots(1, 2, figsize=(n_features_to_show, 8))
+            ax = plt.subplot(1, 2, 1)                
+            waterfall(shap_values[0], max_display=n_features_to_show, show=False)
+            ax.set_ylim([-1, n_features_to_show])
+
+            ax = plt.subplot(1, 2, 2)    
+            beeswarm(global_shap_values, max_display=n_features_to_show, order=shap_values.abs.mean(0), s=2)
+            ax.set_yticklabels([])
+            ax.set_ylim([-1, n_features_to_show])
             
+            st_shap(fig, height=n_features_to_show * 50, width=1500)
+        
             
     
 def process_server_response_decorator(func:Callable):
