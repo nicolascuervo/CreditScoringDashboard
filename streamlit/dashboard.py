@@ -92,7 +92,7 @@ def main():
             st.session_state['credit_analized'] = False
 
         if 'loan_request_data_0' in st.session_state:
-            st.session_state['sk_id_curr'] = sk_id_curr
+            st.session_state['sk_id_curr0'] = sk_id_curr
             loan_request_data_0 = st.session_state['loan_request_data_0']
             loan_submission = load_credit_request_form(loan_request_detail_form, input_information, loan_request_data_0 )
             st.session_state['loan_submission'] = loan_submission
