@@ -41,9 +41,11 @@ ModelEntries = create_model('ModelEntries', **field_types)
 
 def main():
 
+    st.title('Credit Scoring Application')
     # check available models
     available_models = get_model_names(FAST_API)
     model_name_v = st.sidebar.selectbox('model', available_models)
+    
     
     # Streamlit tabs
     tab_names = ['Credit Approval', ' Particular decision factors', 'General decision factors']
@@ -55,7 +57,8 @@ def main():
         key="tab_selector",
         help="Use this to switch between different sections."
     ) 
-
+    st.header(selected_tab)
+    
     if selected_tab == tab_names[0]:
         # credit ID form
         row_0 = st.columns([1, 2])
