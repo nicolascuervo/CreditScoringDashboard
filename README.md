@@ -4,6 +4,8 @@ This project was developepd in an academic context based on the scenario present
 
 hereby is presented the dashboard for interacting with the [API](https://github.com/nicolascuervo/CreditScoringAPI) that serves ONE model for ONE client loan request
 
+A fonctionning version can be found at : https://credit-score-dashboard-886b059eff82.herokuapp.com/
+
 # How to use
 ## Locally
 the following environment variables are to be defined in a file '.env' at root:
